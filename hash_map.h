@@ -14,97 +14,110 @@ private:
     static constexpr size_t K_FILL = 2;
 
     Hash hasher;
-    size_t count_element = 0;
+    size_t element_count = 0;
 
-    typedef std::pair<KeyType, ValueType> element_type;
+    typedef std::pair<KeyType, ValueType> Element;
 
-    std::vector<std::list<element_type>> data;
+    std::vector<std::list<Element>> data;
 
-    template<typename element_type, typename table_iterator_type, typename list_iterator_type>
+    template<typename Element, typename table_iterator_type, typename list_iterator_type>
     class _iterator {
     private:
-        table_iterator_type current_index;
-        list_iterator_type current_itr;
-        table_iterator_type realend;
+        table_iterator_type table_itr;
+        list_iterator_type list_itr;
+        table_iterator_type real_end;
     public:
-        _iterator(const _iterator &other) : current_index(other.current_index),
-                                            current_itr(other.current_itr),
-                                            realend(other.realend) {}
+        _iterator(
+            const _iterator &other)
+            : table_itr(other.table_itr)
+            , list_itr(other.list_itr)
+            , real_end(other.real_end)
+        { }
 
-        _iterator(const table_iterator_type &ind, const list_iterator_type &itr, const table_iterator_type &end) : current_index(ind), 
-                                                                                                                   current_itr(itr),
-                                                                                                                   realend(end) {}
+        _iterator(
+            const table_iterator_type &ind,
+            const list_iterator_type &itr,
+            const table_iterator_type &end)
+            : table_itr(ind)
+            , list_itr(itr)
+            , real_end(end)
+        { }
 
-        _iterator(const table_iterator_type &ind, const table_iterator_type &end) : current_index(ind), 
-                                                                                    realend(end) {}
+        _iterator(
+            const table_iterator_type &ind,
+            const table_iterator_type &end)
+            : table_itr(ind)
+            , real_end(end)
+        { }
 
         _iterator() {}
 
-        table_iterator_type getNext(table_iterator_type cur) {
-            while (cur != realend && (*cur).empty()) cur++;
-            return cur;
+        table_iterator_type getNext(table_iterator_type it) {
+            while (it != real_end && it->empty()) it++;
+            return it;
         }
 
         _iterator operator++() {
-            if (current_index == realend) return (*this);
-            ++current_itr;
-            if (current_itr == (*current_index).end()) {
-                current_index++;
-                current_index = getNext(current_index);
-                if (current_index != realend) {
-                    current_itr = (*current_index).begin();
-                }
+            if (table_itr == real_end)
+                return *this;
+            ++list_itr;
+            if (list_itr == table_itr->end()) {
+                table_itr++;
+                table_itr = getNext(table_itr);
+                if (table_itr != real_end)
+                    list_itr = table_itr->begin();
             }
-            return (*this);
+            return *this;
         }
 
         _iterator operator++(int) {
-            auto old_value = (*this);
+            auto old_value = *this;
             ++(*this);
             return old_value;
         }
 
-        element_type& operator*() const {
-            return *reinterpret_cast<element_type*>(&(*current_itr));
+        Element& operator*() const {
+            return *reinterpret_cast<Element*>(&(*list_itr));
         }
 
-        element_type* operator->() const {
-            return reinterpret_cast<element_type*>(&(*current_itr));
+        Element* operator->() const {
+            return reinterpret_cast<Element*>(&(*list_itr));
         }
 
         bool operator==(const _iterator &other) const {
-            if (current_index == realend && other.current_index == realend) return true;
-            return static_cast<bool>(current_index == other.current_index && current_itr == other.current_itr);
+            if (table_itr == real_end && other.table_itr == real_end)
+                return true;
+            return (table_itr == other.table_itr && list_itr == other.list_itr);
         }
 
         bool operator!=(const _iterator &other) const {
-            return !((*this) == other);
+            return !(*this == other);
         }
     };
 
 public:
 
-    HashMap(Hash _hasher = Hash()) : hasher(_hasher) {
+    HashMap(Hash hasher = Hash()) : hasher(hasher) {
         data.resize(START_SIZE);
     }
 
     template<class Iter>
-    HashMap(Iter begin, Iter end, Hash _hasher = Hash()) : hasher(_hasher) {
+    HashMap(Iter begin, Iter end, Hash hasher = Hash()) : hasher(hasher) {
         data.resize(START_SIZE);
         while (begin != end) {
             insert(*(begin++));
         }
     } 
 
-    HashMap(std::initializer_list<element_type> initializer_list, Hash _hasher = Hash()) :
-        HashMap(initializer_list.begin(), initializer_list.end(), _hasher) {}
+    HashMap(std::initializer_list<Element> initializer_list, Hash hasher = Hash()) :
+        HashMap(initializer_list.begin(), initializer_list.end(), hasher) {}
 
     size_t size() const {
-        return count_element;
+        return element_count;
     }
 
     bool empty() const {
-        return static_cast<bool>(count_element == 0);
+        return (element_count == 0);
     }
 
     Hash hash_function() const {
@@ -112,56 +125,63 @@ public:
     }
 
     void rebuild(size_t new_size) {
-        std::vector<std::list<element_type>> new_data(new_size);
+        std::vector<std::list<Element>> new_data(new_size);
         for (auto it = begin(); !(it == end()); ++it) {
-            auto Key = (*it).first;
-            auto Value = (*it).second;
+            auto Key = it->first;
+            auto Value = it->second;
             new_data[hasher(Key) % new_size].push_back({Key, Value});
         }
         new_data.swap(data);
     }
 
-    void insert(const element_type &elem) {
+    void insert(const Element &elem) {
         size_t index = hasher(elem.first) % data.size();
         bool contains = false;
         for (const auto &x : data[index]) {
-            if (x.first == elem.first) contains = true;
+            if (x.first == elem.first)
+                contains = true;
         }
-        if (contains) return;
-        count_element++;
+        if (contains)
+            return;
+        element_count++;
         data[index].push_back(elem);
-        if (count_element * K_FILL > data.size()) rebuild(data.size() * K_FILL);
+        if (element_count * K_FILL > data.size())
+            rebuild(data.size() * K_FILL);
     }
 
     void erase(const KeyType &Key) {
         size_t index = hasher(Key) % data.size();
         bool contains = false;
         for (auto it = data[index].begin(); it != data[index].end(); ++it) {
-            if ((*it).first == Key) {
+            if (it->first == Key) {
                 contains = true;
                 data[index].erase(it);
                 break;
             }
         }
-        if (contains) count_element--;
+        if (contains)
+            element_count--;
     }
 
-    typedef _iterator<std::pair<const KeyType, ValueType>, typename std::vector<std::list<element_type>>::iterator,
-                                                           typename std::list<element_type>::iterator> iterator;
+    using iterator = _iterator<
+        std::pair<const KeyType, ValueType>,
+        typename std::vector<std::list<Element>>::iterator,
+        typename std::list<Element>::iterator>;
 
-    typedef _iterator<const std::pair<const KeyType, ValueType>, typename std::vector<std::list<element_type>>::const_iterator,
-                                                                 typename std::list<element_type>::const_iterator> const_iterator;
-
+    using const_iterator = _iterator<
+        const std::pair<const KeyType, ValueType>,
+        typename std::vector<std::list<Element>>::const_iterator,
+        typename std::list<Element>::const_iterator>;
+    
     iterator begin() {
-        auto current_index = data.begin();
-        for (; current_index != data.end(); current_index++) {
-            if (!(*current_index).empty()) {
+        auto table_itr = data.begin();
+        for (; table_itr != data.end(); table_itr++) {
+            if (!(table_itr->empty()))
                 break;
-            }
         }
-        if (current_index == data.end())
-            return iterator(current_index, data.end());
-        return iterator(current_index, (*current_index).begin(), data.end());
+        if (table_itr == data.end())
+            return iterator(table_itr, data.end());
+        return iterator(table_itr, table_itr->begin(), data.end());
     }
 
     iterator end() {
@@ -169,15 +189,14 @@ public:
     }
 
     const_iterator begin() const {
-        auto current_index = data.begin();
-        for (; current_index != data.end(); current_index++) {
-            if (!(*current_index).empty()) {
+        auto table_itr = data.begin();
+        for (; table_itr != data.end(); table_itr++) {
+            if (!(table_itr->empty()))
                 break;
-            }
         }
-        if (current_index == data.end())
-            return const_iterator(current_index, data.end());
-        return const_iterator(current_index, (*current_index).begin(), data.end());
+        if (table_itr == data.end())
+            return const_iterator(table_itr, data.end());
+        return const_iterator(table_itr, table_itr->begin(), data.end());
     }
 
     const_iterator end() const {
@@ -187,9 +206,8 @@ public:
     iterator find(const KeyType &Key) {
         size_t index = hasher(Key) % data.size();
         for (auto it = data[index].begin(); it != data[index].end(); ++it) {
-            if ((*it).first == Key) {
+            if (it->first == Key)
                 return iterator(data.begin() + index, it, data.end());
-            }
         }
         return end();
     }
@@ -197,9 +215,8 @@ public:
     const_iterator find(const KeyType &Key) const {
         size_t index = hasher(Key) % data.size();
         for (auto it = data[index].begin(); it != data[index].end(); ++it) {
-            if ((*it).first == Key) {
+            if (it->first == Key)
                 return const_iterator(data.begin() + index, it, data.end());
-            }
         }
         return end();
     }
@@ -207,20 +224,18 @@ public:
     ValueType& operator[](const KeyType &Key) {
         size_t index = hasher(Key) % data.size();
         for (auto it = data[index].begin(); it != data[index].end(); ++it) {
-            if ((*it).first == Key) {
-                return (*it).second;
-            }
+            if (it->first == Key)
+                return it->second;
         }
         insert({Key, ValueType()});
-        return (*find(Key)).second;
+        return find(Key)->second;
     }
 
     const ValueType& at(const KeyType &Key) const {
         size_t index = hasher(Key) % data.size();
         for (auto it = data[index].begin(); it != data[index].end(); ++it) {
-            if ((*it).first == Key) {
-                return (*it).second;
-            }
+            if (it->first == Key)
+                return it->second;
         }
         throw std::out_of_range("Out of range"); 
     }
@@ -228,6 +243,6 @@ public:
     void clear() {
         data.clear();
         data.resize(START_SIZE);
-        count_element = 0;
+        element_count = 0;
     }
 };
